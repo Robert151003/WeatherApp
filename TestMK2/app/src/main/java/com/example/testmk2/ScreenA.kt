@@ -4,7 +4,9 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -49,6 +51,7 @@ import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Locale
 
+@RequiresApi(Build.VERSION_CODES.O)
 @SuppressLint("CoroutineCreationDuringComposition")
 @Composable
 fun ScreenA(navController: NavController, context: Context, newsContext: Context, locationViewModel: LocationViewModel) {
@@ -65,6 +68,7 @@ fun ScreenA(navController: NavController, context: Context, newsContext: Context
     val lon = locationViewModel.lon
 
     LaunchedEffect(Unit) {
+
         // Check if enough time has passed to access the api, if not get from local storage
         val storedTempData = retrieveWeatherDataFromStorage(context, "weatherData")
         val storedTimeData = retrieveWeatherDataFromStorage(context, "weatherTime")

@@ -65,9 +65,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         fusedLocationProvider = LocationServices.getFusedLocationProviderClient(this)
 
-        // Schedule Notifications
-        createNotificationChannel()
-        scheduleNotifications()
 
         // Request notification permission
         if (Build.VERSION.SDK_INT >= 33) {
@@ -263,25 +260,39 @@ class MainActivity : ComponentActivity() {
             .setNegativeButton("Cancel", null)
             .show()
     }
+}
 
-    // Schedule Notifications
+
+object NotificationHelper {
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    fun createNotificationChannel(context: Context) {
+        val name = "Notif Channel"
+        val desc = "Description"
+        val importance = NotificationManager.IMPORTANCE_DEFAULT
+        val channel = NotificationChannel(channelID, name, importance)
+        channel.description = desc
+        val notificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.createNotificationChannel(channel)
+    }
+
     @SuppressLint("ScheduleExactAlarm")
     @RequiresApi(Build.VERSION_CODES.O)
-    public fun scheduleNotifications(){
-        val intent = Intent(applicationContext, NotificationReceiver::class.java)
-        val title = "Title"
-        val message = "Message"
+    fun scheduleNotifications(context: Context, title:String, message:String) {
+        val intent = Intent(context, NotificationReceiver::class.java)
+
         intent.putExtra(titleExtra, title)
         intent.putExtra(messageExtra, message)
 
         val pendingIntent = PendingIntent.getBroadcast(
-            applicationContext,
+            context,
             notificationID,
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val time = getTime()
         alarmManager.setExactAndAllowWhileIdle(
             AlarmManager.RTC_WAKEUP,
@@ -290,7 +301,7 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    private fun getTime() : Long {
+    private fun getTime(): Long {
         val calendar = Calendar.getInstance().apply {
             timeInMillis = System.currentTimeMillis()
             set(Calendar.HOUR_OF_DAY, 8)
@@ -303,17 +314,6 @@ class MainActivity : ComponentActivity() {
             calendar.add(Calendar.DAY_OF_MONTH, 1)
         }
         return calendar.timeInMillis
-    }
-
-    @RequiresApi(Build.VERSION_CODES.O)
-    public fun createNotificationChannel(){
-        val name = "Notif Channel"
-        val desc = "Description"
-        val importance = NotificationManager.IMPORTANCE_DEFAULT
-        val channel = NotificationChannel(channelID, name, importance)
-        channel.description = desc
-        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.createNotificationChannel(channel)
     }
 }
 

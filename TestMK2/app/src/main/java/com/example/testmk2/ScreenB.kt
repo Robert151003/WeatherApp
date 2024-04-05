@@ -73,7 +73,20 @@ fun ScreenB(navController: NavController, context: Context, newsContext: Context
     val lat = locationViewModel.lat
     val lon = locationViewModel.lon
 
+    // Define mutable state variable to hold the weather information
+    var weatherDataInfo by remember { mutableStateOf(WeatherDataInfo()) }
+
+    val coroutineScope = rememberCoroutineScope()
+
+    // Update the UI with weather data
+    fun updateUI(weatherData: WeatherDataInfo) {
+        weatherDataInfo = weatherData
+
+    }
+
     LaunchedEffect(Unit) {
+
+
 
         val fetchedCoordinates = fetchCityCoordinates(api)
         val givenCoordinates = Pair(lat, lon) // Provide your given coordinates here
@@ -107,18 +120,14 @@ fun ScreenB(navController: NavController, context: Context, newsContext: Context
             Log.d("new","$closestCity not found.")
         }
 
-
+        // Call createNotificationChannel
+        NotificationHelper.createNotificationChannel(context)
+        // Call scheduleNotifications
+        NotificationHelper.scheduleNotifications(context, "Weather", weatherDataInfo.weatherDescription + " | Highs of " + weatherDataInfo.tempMax + " | Lows of " + weatherDataInfo.tempMin + " | Winds up to " + weatherDataInfo.windSpeed + "m/s")
     }
 
-    // Define mutable state variable to hold the weather information
-    var weatherDataInfo by remember { mutableStateOf(WeatherDataInfo()) }
 
-    val coroutineScope = rememberCoroutineScope()
 
-    // Update the UI with weather data
-    fun updateUI(weatherData: WeatherDataInfo) {
-        weatherDataInfo = weatherData
-    }
 
     // Call the API every ten seconds using a coroutine
     LaunchedEffect(Unit) {
@@ -129,6 +138,9 @@ fun ScreenB(navController: NavController, context: Context, newsContext: Context
             // Delay for a second
             delay(1000)
         }
+
+
+
     }
 
     // Page design
