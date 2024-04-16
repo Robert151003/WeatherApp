@@ -17,12 +17,14 @@ import android.os.Bundle
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
+import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
+import androidx.compose.runtime.remember
 import androidx.core.content.ContextCompat
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -34,6 +36,7 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.util.Calendar
+
 
 class MainActivity : ComponentActivity() {
 
@@ -83,6 +86,7 @@ class MainActivity : ComponentActivity() {
             // Permission not granted, request it
             requestLocationPermission()
         }
+
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
@@ -94,14 +98,18 @@ class MainActivity : ComponentActivity() {
                         // Latitude and longitude are available, so set them in the view model
                         locationViewModel.lat = location.latitude
                         locationViewModel.lon = location.longitude
-
                         // Call setContent to set up the UI with the retrieved location
                         setContent {
                             val navController = rememberNavController()
 
                             NavHost(navController = navController, startDestination = Routes.screenB) {
                                 composable(Routes.screenA) {
-                                    ScreenA(navController, applicationContext, this@MainActivity, locationViewModel)
+                                    val webView = remember {
+                                        WebView(this@MainActivity).apply {
+                                            settings.javaScriptEnabled = true
+                                        }
+                                    }
+                                    ScreenA(navController, applicationContext, this@MainActivity, locationViewModel, webView)
                                 }
                                 composable(Routes.screenB) {
                                     // Retrieve latitude and longitude coordinates

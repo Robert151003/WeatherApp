@@ -62,6 +62,9 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.material)
     implementation ("androidx.work:work-runtime:2.7.0")
+    implementation ("com.google.accompanist:accompanist-coil:0.15.0")
+    implementation ("io.coil-kt:coil-compose:0.15.0")
+
     val nav_version = "2.7.7"
     implementation("androidx.navigation:navigation-compose:$nav_version")
     implementation ("com.google.android.gms:play-services-location:18.0.0")

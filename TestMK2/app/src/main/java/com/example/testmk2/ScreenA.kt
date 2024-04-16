@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.util.Log
+import android.webkit.WebView
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -21,6 +22,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,6 +46,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -51,21 +55,23 @@ import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Locale
 
+
+var lat = 0.0
+var lon = 0.0
 @RequiresApi(Build.VERSION_CODES.O)
 @SuppressLint("CoroutineCreationDuringComposition")
 @Composable
-fun ScreenA(navController: NavController, context: Context, newsContext: Context, locationViewModel: LocationViewModel) {
+fun ScreenA(navController: NavController, context: Context, newsContext: Context, locationViewModel: LocationViewModel, webView: WebView) {
 
     val tempList = remember { mutableStateListOf<String>() }
     val timeList = remember { mutableStateListOf<String>() }
     var apiCalled by remember { mutableStateOf(false) }
 
-    var city by remember { mutableStateOf("Leicester") } // Assuming a default city
-    var cities = arrayOf("London","Liverpool", "Leicester", "Manchester", "New York", "Paris", "Tokyo", "Berlin")
+    var city by remember { mutableStateOf("") } // Assuming a default city
 
     // Get the users coordinates
-    val lat = locationViewModel.lat
-    val lon = locationViewModel.lon
+    lat = locationViewModel.lat
+    lon = locationViewModel.lon
 
     LaunchedEffect(Unit) {
 
@@ -80,48 +86,18 @@ fun ScreenA(navController: NavController, context: Context, newsContext: Context
             fetchWeatherData(tempList, timeList, context, apiCalled)
         }
 
-
-        val fetchedCoordinates = fetchCityCoordinatesA(api)
-        val givenCoordinates = Pair(lat, lon) // Provide your given coordinates here
-        val closestCity = withContext(Dispatchers.Default) {
-            findClosestCityA(givenCoordinates, fetchedCoordinates)
+        for (entry in tempList) {
+            Log.d("List", entry)
         }
-
-        // Find the index of the closest city
-        val index = cities.indexOf(closestCity)
-        mainCity = city
-        if (index != -1) { // If closest city is found in the array
-            // Create a new array to hold the rearranged elements
-            val newArr = Array<String>(cities.size) { "" }
-
-            // Move the city to the front
-            newArr[0] = closestCity
-
-            // Copy the remaining cities
-            var newIndex = 1
-            for (i in cities.indices) {
-                if (i != index) {
-                    newArr[newIndex] = cities[i]
-                    newIndex++
-                }
-            }
-            cities = newArr
-
-            // Update the city state
-            city = closestCity
-        } else {
-            Log.d("new","$closestCity not found.")
-        }
-
-        // Show notification with the closest city
+        city = fetchCityCoordinatesA(api)
 
     }
-
 
     // Top Buttons
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .background(
                 brush = Brush.verticalGradient(
                     colors = listOf(
@@ -153,7 +129,7 @@ fun ScreenA(navController: NavController, context: Context, newsContext: Context
             // News button (right-aligned)
             Button(
                 onClick = {
-                    goToWeatherA(newsContext)
+                    goToWeatherA(newsContext, lat.toString(), lon.toString())
                 },
                 modifier = Modifier
                     .padding(start = 8.dp, top = 16.dp, end = 16.dp) // Adjust padding as needed
@@ -162,345 +138,344 @@ fun ScreenA(navController: NavController, context: Context, newsContext: Context
                 Text(text = "Weather")
             }
         }
-    }
 
-    // Weather Data
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-    ){
-
-        // Today
-        Column(
-            modifier = Modifier
-                .wrapContentSize()
-                .align(Alignment.CenterHorizontally)
-                .padding(top = 150.dp), // Adjust top padding as needed
-            verticalArrangement = Arrangement.Top,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ){
-            Text(text = city, color = Color.White, fontSize = 30.sp)
-            Text(
-                text = weatherDataDisplay(tempList, 0, 0),
-                color = Color.White,
-                fontSize = 24.sp,
-                modifier = Modifier
-                    .padding(bottom = 40.dp)
-                    .align(Alignment.CenterHorizontally)
-            )
-
-
-
-            LazyRow(
-                modifier = Modifier.padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Assuming you have a structured data model or a predefined list
-                // For demonstration, using indexed approach with placeholders
-
-                itemsIndexed(timeList.take(6)) { index, time ->
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(end = 24.dp) // Space between each column
-                    ) {
-                        Text(
-                            text = time,
-                            color = Color.White,
-                            fontSize = 20.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp)) // Space between time and temperature
-                        Text(
-                            text = weatherDataDisplay(tempList, 0, index+1) + "°",
-                            color = Color.White,
-                            fontSize = 18.sp
-                        )
-                    }
-                }
-
-            }
-
-        }
-
-        // Future
+        // Weather Data
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .align(Alignment.CenterHorizontally)
-                .padding(top = 64.dp), // Adjust top padding as needed
-            verticalArrangement = Arrangement.Top,
-            horizontalAlignment = Alignment.CenterHorizontally
         ){
 
-            // Day 1
-            Row(modifier = Modifier
-                .padding(10.dp)){
+            // Today
+            Column(
+                modifier = Modifier
+                    .wrapContentSize()
+                    .align(Alignment.CenterHorizontally)
+                    .padding(top = 150.dp), // Adjust top padding as needed
+                verticalArrangement = Arrangement.Top,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ){
+                Text(text = city, color = Color.White, fontSize = 30.sp)
                 Text(
-                    text = weatherDataDisplay(tempList, 1, 0) + "   →",
+                    text = weatherDataDisplay(tempList, 0, 0),
                     color = Color.White,
-                    fontSize = 15.sp,
+                    fontSize = 24.sp,
                     modifier = Modifier
-                        .padding(end = 10.dp)
-                        .align(Alignment.CenterVertically)
+                        .padding(bottom = 40.dp)
+                        .align(Alignment.CenterHorizontally)
                 )
 
-                Column{
-                    Row(verticalAlignment = Alignment.CenterVertically){
-                        Image(
-                            painter = painterResource(id = R.drawable.sunrise_icon),
-                            contentDescription = "Morning",
-                            modifier = Modifier
-                                .padding(end = 13.dp)
-                                .size(width = 30.dp, height = 30.dp)
-                        )
 
-                        Image(
-                            painter = painterResource(id = R.drawable.midday_icon),
-                            contentDescription = "Morning",
-                            modifier = Modifier
-                                .padding(end = 13.dp)
-                                .size(width = 30.dp, height = 30.dp)
-                        )
-                        Image(
-                            painter = painterResource(id = R.drawable.sunset_icon),
-                            contentDescription = "Morning",
-                            modifier = Modifier
-                                .size(width = 30.dp, height = 30.dp)
-                        )
+
+                LazyRow(
+                    modifier = Modifier.padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Assuming you have a structured data model or a predefined list
+                    // For demonstration, using indexed approach with placeholders
+
+                    itemsIndexed(timeList.take(6)) { index, time ->
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(end = 24.dp) // Space between each column
+                        ) {
+                            Text(
+                                text = time,
+                                color = Color.White,
+                                fontSize = 20.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp)) // Space between time and temperature
+
+                            val temperature = if (weatherDataDisplay(tempList, 0, index + 1) == "na") {
+                                weatherDataDisplay(tempList, 1, index + 1)
+                            } else {
+                                weatherDataDisplay(tempList, 0, index + 1)
+                            }
+
+                            Text(
+                                text = "$temperature°C",
+                                color = Color.White,
+                                fontSize = 18.sp
+                            )
+                        }
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically){
-                        Text(
-                            text = weatherDataDisplay(tempList, 1, 2) + "°C",
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            modifier = Modifier
-                                .padding(end = 10.dp)
-                        )
-                        Text(
-                            text = weatherDataDisplay(tempList, 1, 4) + "°C",
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            modifier = Modifier
-                                .padding(end = 10.dp)
-
-                        )
-                        Text(
-                            text = weatherDataDisplay(tempList, 1, 6) + "°C",
-                            color = Color.White,
-                            fontSize = 15.sp
-                        )
-                    }
-                }
 
 
-
-            }
-
-            // Day 2
-            Row(modifier = Modifier
-                .padding(10.dp)){
-                Text(
-                    text = weatherDataDisplay(tempList, 2, 0)+ "   →",
-                    color = Color.White,
-                    fontSize = 15.sp,
-                    modifier = Modifier
-                        .padding(end = 10.dp)
-                        .align(Alignment.CenterVertically)
-                )
-                Column{
-                    Row(verticalAlignment = Alignment.CenterVertically){
-                        Image(
-                            painter = painterResource(id = R.drawable.sunrise_icon),
-                            contentDescription = "Morning",
-                            modifier = Modifier
-                                .padding(end = 13.dp)
-                                .size(width = 30.dp, height = 30.dp)
-                        )
-
-                        Image(
-                            painter = painterResource(id = R.drawable.midday_icon),
-                            contentDescription = "Morning",
-                            modifier = Modifier
-                                .padding(end = 13.dp)
-                                .size(width = 30.dp, height = 30.dp)
-                        )
-                        Image(
-                            painter = painterResource(id = R.drawable.sunset_icon),
-                            contentDescription = "Morning",
-                            modifier = Modifier
-                                .size(width = 30.dp, height = 30.dp)
-                        )
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically){
-                        Text(
-                            text = weatherDataDisplay(tempList, 2, 2) + "°C",
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            modifier = Modifier
-                                .padding(end = 10.dp)
-                        )
-                        Text(
-                            text = weatherDataDisplay(tempList, 2, 4) + "°C",
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            modifier = Modifier
-                                .padding(end = 10.dp)
-                        )
-                        Text(
-                            text = weatherDataDisplay(tempList, 2, 6) + "°C",
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            modifier = Modifier
-                                .padding(end = 10.dp)
-                        )
-                    }
-                }
-
-
-
-            }
-
-
-
-
-
-            Row(
-                modifier = Modifier.padding(10.dp)
-            ) {
-                Text(
-                    text = weatherDataDisplay(tempList, 3, 0) + "   →",
-                    color = Color.White,
-                    fontSize = 15.sp,
-                    modifier = Modifier
-                        .padding(end = 10.dp)
-                        .align(Alignment.CenterVertically)
-                )
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically){
-                        Image(
-                            painter = painterResource(id = R.drawable.sunrise_icon),
-                            contentDescription = "Morning",
-                            modifier = Modifier
-                                .padding(end = 13.dp)
-                                .size(width = 30.dp, height = 30.dp)
-                        )
-
-                        Image(
-                            painter = painterResource(id = R.drawable.midday_icon),
-                            contentDescription = "Morning",
-                            modifier = Modifier
-                                .padding(end = 13.dp)
-                                .size(width = 30.dp, height = 30.dp)
-                        )
-                        Image(
-                            painter = painterResource(id = R.drawable.sunset_icon),
-                            contentDescription = "Morning",
-                            modifier = Modifier
-                                .size(width = 30.dp, height = 30.dp)
-                        )
-                    }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = weatherDataDisplay(tempList, 3, 2) + "°C",
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            modifier = Modifier
-                                .padding(end = 10.dp)
-                        )
-                        Text(
-                            text = weatherDataDisplay(tempList, 3, 4) + "°C",
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            modifier = Modifier
-                                .padding(end = 10.dp)
-                        )
-                        Text(
-                            text = weatherDataDisplay(tempList, 3, 6) + "°C",
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            modifier = Modifier
-                                .padding(end = 10.dp)
-                        )
-                    }
                 }
 
             }
 
+            // Future
 
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .align(Alignment.CenterHorizontally)
+                    .padding(top = 64.dp), // Adjust top padding as needed
+                verticalArrangement = Arrangement.Top,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ){
 
-
-
-            Row(modifier = Modifier
+                // Day 1
+                Row(modifier = Modifier
                     .padding(10.dp)){
-                Text(
-                    text = weatherDataDisplay(tempList, 4, 0)+ "   →",
-                    color = Color.White,
-                    fontSize = 15.sp,
-                    modifier = Modifier
-                        .padding(end = 10.dp)
-                        .align(Alignment.CenterVertically)
-                )
+                    Text(
+                        text = weatherDataDisplay(tempList, 1, 0) + "   →",
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        modifier = Modifier
+                            .padding(end = 10.dp)
+                            .align(Alignment.CenterVertically)
+                    )
 
-                Column{
-                    Row(verticalAlignment = Alignment.CenterVertically){
-                        Image(
-                            painter = painterResource(id = R.drawable.sunrise_icon),
-                            contentDescription = "Morning",
-                            modifier = Modifier
-                                .padding(end = 13.dp)
-                                .size(width = 30.dp, height = 30.dp)
-                        )
+                    Column{
+                        Row(verticalAlignment = Alignment.CenterVertically){
+                            Column{
+                                Image(
+                                    painter = painterResource(id = R.drawable.sunrise_icon),
+                                    contentDescription = "Morning",
+                                    modifier = Modifier
+                                        .padding(end = 13.dp)
+                                        .size(width = 30.dp, height = 30.dp)
+                                )
+                                Text(
+                                    text = weatherDataDisplay(tempList, 1, 2) + "°C",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    modifier = Modifier
+                                        .padding(end = 10.dp)
+                                )
+                            }
+                            Column{
+                                Image(
+                                    painter = painterResource(id = R.drawable.midday_icon),
+                                    contentDescription = "Morning",
+                                    modifier = Modifier
+                                        .padding(end = 13.dp)
+                                        .size(width = 30.dp, height = 30.dp)
+                                )
+                                Text(
+                                    text = weatherDataDisplay(tempList, 1, 4) + "°C",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    modifier = Modifier
+                                        .padding(end = 10.dp)
 
-                        Image(
-                            painter = painterResource(id = R.drawable.midday_icon),
-                            contentDescription = "Morning",
-                            modifier = Modifier
-                                .padding(end = 13.dp)
-                                .size(width = 30.dp, height = 30.dp)
-                        )
-                        Image(
-                            painter = painterResource(id = R.drawable.sunset_icon),
-                            contentDescription = "Morning",
-                            modifier = Modifier
-                                .size(width = 30.dp, height = 30.dp)
-                        )
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically){
-                        Text(
-                            text = weatherDataDisplay(tempList, 4, 2) + "°C",
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            modifier = Modifier
-                                .padding(end = 10.dp)
-                        )
-                        Text(
-                            text = weatherDataDisplay(tempList, 4, 4) + "°C",
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            modifier = Modifier
-                                .padding(end = 10.dp)
-                        )
-                        Text(
-                            text = weatherDataDisplay(tempList, 4, 6) + "°C",
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            modifier = Modifier
-                                .padding(end = 10.dp)
-                        )
+                                )
+                            }
+                            Column{
+                                Image(
+                                    painter = painterResource(id = R.drawable.sunset_icon),
+                                    contentDescription = "Morning",
+                                    modifier = Modifier
+                                        .size(width = 30.dp, height = 30.dp)
+                                )
+                                Text(
+                                    text = weatherDataDisplay(tempList, 1, 6) + "°C",
+                                    color = Color.White,
+                                    fontSize = 15.sp
+                                )
+                            }
+                        }
                     }
                 }
 
+                // Day 2
+                Row(modifier = Modifier
+                    .padding(10.dp)){
+                    Text(
+                        text = weatherDataDisplay(tempList, 2, 0) + "   →",
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        modifier = Modifier
+                            .padding(end = 10.dp)
+                            .align(Alignment.CenterVertically)
+                    )
 
+                    Column{
+                        Row(verticalAlignment = Alignment.CenterVertically){
+                            Column{
+                                Image(
+                                    painter = painterResource(id = R.drawable.sunrise_icon),
+                                    contentDescription = "Morning",
+                                    modifier = Modifier
+                                        .padding(end = 13.dp)
+                                        .size(width = 30.dp, height = 30.dp)
+                                )
+                                Text(
+                                    text = weatherDataDisplay(tempList, 2, 2) + "°C",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    modifier = Modifier
+                                        .padding(end = 10.dp)
+                                )
+                            }
+                            Column{
+                                Image(
+                                    painter = painterResource(id = R.drawable.midday_icon),
+                                    contentDescription = "Morning",
+                                    modifier = Modifier
+                                        .padding(end = 13.dp)
+                                        .size(width = 30.dp, height = 30.dp)
+                                )
+                                Text(
+                                    text = weatherDataDisplay(tempList, 2, 4) + "°C",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    modifier = Modifier
+                                        .padding(end = 10.dp)
 
+                                )
+                            }
+                            Column{
+                                Image(
+                                    painter = painterResource(id = R.drawable.sunset_icon),
+                                    contentDescription = "Morning",
+                                    modifier = Modifier
+                                        .size(width = 30.dp, height = 30.dp)
+                                )
+                                Text(
+                                    text = weatherDataDisplay(tempList, 2, 6) + "°C",
+                                    color = Color.White,
+                                    fontSize = 15.sp
+                                )
+                            }
+                        }
+                    }
                 }
 
+                // Day 3
+                Row(modifier = Modifier
+                    .padding(10.dp)){
+                    Text(
+                        text = weatherDataDisplay(tempList, 3, 0) + "   →",
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        modifier = Modifier
+                            .padding(end = 10.dp)
+                            .align(Alignment.CenterVertically)
+                    )
 
+                    Column{
+                        Row(verticalAlignment = Alignment.CenterVertically){
+                            Column{
+                                Image(
+                                    painter = painterResource(id = R.drawable.sunrise_icon),
+                                    contentDescription = "Morning",
+                                    modifier = Modifier
+                                        .padding(end = 13.dp)
+                                        .size(width = 30.dp, height = 30.dp)
+                                )
+                                Text(
+                                    text = weatherDataDisplay(tempList, 3, 2) + "°C",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    modifier = Modifier
+                                        .padding(end = 10.dp)
+                                )
+                            }
+                            Column{
+                                Image(
+                                    painter = painterResource(id = R.drawable.midday_icon),
+                                    contentDescription = "Morning",
+                                    modifier = Modifier
+                                        .padding(end = 13.dp)
+                                        .size(width = 30.dp, height = 30.dp)
+                                )
+                                Text(
+                                    text = weatherDataDisplay(tempList, 3, 4) + "°C",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    modifier = Modifier
+                                        .padding(end = 10.dp)
 
+                                )
+                            }
+                            Column{
+                                Image(
+                                    painter = painterResource(id = R.drawable.sunset_icon),
+                                    contentDescription = "Morning",
+                                    modifier = Modifier
+                                        .size(width = 30.dp, height = 30.dp)
+                                )
+                                Text(
+                                    text = weatherDataDisplay(tempList, 3, 6) + "°C",
+                                    color = Color.White,
+                                    fontSize = 15.sp
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Day 4
+                Row(modifier = Modifier
+                    .padding(10.dp)){
+                    Text(
+                        text = weatherDataDisplay(tempList, 4, 0) + "   →",
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        modifier = Modifier
+                            .padding(end = 10.dp)
+                            .align(Alignment.CenterVertically)
+                    )
+
+                    Column{
+                        Row(verticalAlignment = Alignment.CenterVertically){
+                            Column{
+                                Image(
+                                    painter = painterResource(id = R.drawable.sunrise_icon),
+                                    contentDescription = "Morning",
+                                    modifier = Modifier
+                                        .padding(end = 13.dp)
+                                        .size(width = 30.dp, height = 30.dp)
+                                )
+                                Text(
+                                    text = weatherDataDisplay(tempList, 4, 2) + "°C",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    modifier = Modifier
+                                        .padding(end = 10.dp)
+                                )
+                            }
+                            Column{
+                                Image(
+                                    painter = painterResource(id = R.drawable.midday_icon),
+                                    contentDescription = "Morning",
+                                    modifier = Modifier
+                                        .padding(end = 13.dp)
+                                        .size(width = 30.dp, height = 30.dp)
+                                )
+                                Text(
+                                    text = weatherDataDisplay(tempList, 4, 4) + "°C",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    modifier = Modifier
+                                        .padding(end = 10.dp)
+
+                                )
+                            }
+                            Column{
+                                Image(
+                                    painter = painterResource(id = R.drawable.sunset_icon),
+                                    contentDescription = "Morning",
+                                    modifier = Modifier
+                                        .size(width = 30.dp, height = 30.dp)
+                                )
+                                Text(
+                                    text = weatherDataDisplay(tempList, 4, 6) + "°C",
+                                    color = Color.White,
+                                    fontSize = 15.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
 
-
     }
+
+
 }
 
 
@@ -519,6 +494,7 @@ fun weatherDataDisplay(tempList: MutableList<String>, index1: Int, index2: Int):
     }
     return data
 }
+
 
 // Access the api to get the weather data
 @OptIn(DelicateCoroutinesApi::class)
@@ -677,26 +653,19 @@ private fun retrieveWeatherDataFromStorage(context: Context, storageKey: String)
 
 
 // Get coordinates of cities to compare with the users
-suspend fun fetchCityCoordinatesA(apiKey: String): List<Pair<String, Pair<Double, Double>>> {
-    val citiesWithCoordinates = mutableListOf<Pair<String, Pair<Double, Double>>>()
+suspend fun fetchCityCoordinatesA(apiKey: String): String {
+
+    var name = ""
 
     withContext(Dispatchers.IO) {
         try {
-            val apiUrl = "https://api.openweathermap.org/data/2.5/group?id=2643743,2644210,2644668,2643123,5128581,2988507,1850147,2950159&units=metric&appid=$apiKey"
+            val apiUrl = "https://api.openweathermap.org/geo/1.0/reverse?lat=${lat.toString()}&lon=${lon.toString()}&limit=5&appid=$apiKey"
             val response = URL(apiUrl).readText(Charsets.UTF_8)
-            val jsonObj = JSONObject(response)
-
-            val citiesArray = jsonObj.getJSONArray("list")
-            Log.d("FetchCityCoordinates", "Number of cities in response: ${citiesArray.length()}")
-
-            for (i in 0 until citiesArray.length()) {
-                val cityObj = citiesArray.getJSONObject(i)
-                val coord = cityObj.getJSONObject("coord")
-                val cityId = cityObj.getInt("id")
-                val address = cityObj.getString("name")
-                val latitude = coord.getDouble("lat")
-                val longitude = coord.getDouble("lon")
-                citiesWithCoordinates.add(address to (latitude to longitude))
+            val jsonArray = JSONArray(response)
+            for (i in 0 until jsonArray.length()) {
+                val jsonObject = jsonArray.getJSONObject(i)
+                name = jsonObject.getString("name")
+                Log.d("Location", "Name: $name")
             }
         } catch (e: Exception) {
             Log.e("FetchCityCoordinates", "Error fetching city coordinates: ${e.message}")
@@ -704,52 +673,13 @@ suspend fun fetchCityCoordinatesA(apiKey: String): List<Pair<String, Pair<Double
         }
     }
 
-    Log.d("FetchCityCoordinates", "Number of cities with coordinates: ${citiesWithCoordinates.size}")
-    return citiesWithCoordinates
+    return name
 }
 
-// Function to find the closest city to the user
-fun findClosestCityA(coordinates: Pair<Double, Double>, citiesWithCoordinates: List<Pair<String, Pair<Double, Double>>>): String {
-    var closestCity = ""
-    var minDistance = Double.MAX_VALUE
-
-    // Logging fetched coordinates
-    Log.d("Coordinates", "Given Coordinates: ${coordinates.first}, ${coordinates.second}")
-    Log.d("FindClosestCity", "Searching for closest city")
-    Log.d("FindClosestCity", "Number of cities with coordinates: ${citiesWithCoordinates.size}") // New log statement
-    for ((city, cityCoordinates) in citiesWithCoordinates) {
-        // Logging city coordinates
-        Log.d("Coordinates", "$city Coordinates: ${cityCoordinates.first}, ${cityCoordinates.second}")
-
-        val distance = calculateDistance(coordinates.first, coordinates.second, cityCoordinates.first, cityCoordinates.second)
-
-        // Logging calculated distance
-        Log.d("Distance", "Distance to $city: $distance km")
-
-        if (distance < minDistance) {
-            minDistance = distance
-            closestCity = city
-        }
-    }
-    Log.d("ClosestCity", "Closest City: $closestCity")
-    return closestCity
-}
-
-// Function to calculate distance between two sets of coordinates using Haversine formula
-fun calculateDistanceA(lon1: Double, lat1: Double, lon2: Double, lat2: Double): Double {
-    val R = 6371 // Radius of the earth in km
-    val dLat = Math.toRadians(lat2 - lat1)
-    val dLon = Math.toRadians(lon2 - lon1)
-    val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2)
-    val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-    return R * c
-}
 
 // Access to an outside app
-fun goToWeatherA(context: Context?) {
-    val url = "https://www.google.com/search?q=weather"
+fun goToWeatherA(context: Context?, lat:String, lon:String) {
+    val url = "https://www.ventusky.com/?p=$lat;$lon;5&l=temperature-2m&w=off"
     goToUrl(context, url)
 }
 
@@ -758,3 +688,6 @@ private fun goToUrl(context: Context?, url: String) {
     val launchBrowser = Intent(Intent.ACTION_VIEW, uriUrl)
     context?.startActivity(launchBrowser)
 }
+
+
+

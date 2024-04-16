@@ -1,6 +1,7 @@
 package com.example.testmk2
 
 import android.annotation.SuppressLint
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
@@ -12,6 +13,7 @@ import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,15 +22,21 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -39,6 +47,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -47,6 +56,7 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URL
 import java.text.SimpleDateFormat
@@ -56,8 +66,7 @@ import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.round
 
-var mainCity = ""
-var selectedCityIndex = 0
+var celsius = true
 var canSwipe = true
 val api: String = "1d17f66fa01ebd4dfa7c0aaa4d83e4e0"
 var result = false
@@ -66,7 +75,7 @@ var result = false
 @Composable
 fun ScreenB(navController: NavController, context: Context, newsContext: Context, locationViewModel: LocationViewModel) {
     // Define mutable state variable to hold the city
-    var city by remember { mutableStateOf("Leicester") } // Assuming a default city
+    var city by remember { mutableStateOf("London") } // Assuming a default city
     var cities = arrayOf("London","Liverpool", "Leicester", "Manchester", "New York", "Paris", "Tokyo", "Berlin")
 
     // Get the users coordinates
@@ -78,17 +87,30 @@ fun ScreenB(navController: NavController, context: Context, newsContext: Context
 
     val coroutineScope = rememberCoroutineScope()
 
+    var airQuality by remember{ mutableStateOf("")}
+    var airQualityDesc by remember{ mutableStateOf("")}
+
     // Update the UI with weather data
     fun updateUI(weatherData: WeatherDataInfo) {
         weatherDataInfo = weatherData
+    }
 
+    fun selectCity() {
+        // Update the UI with weather data for the selected city
+        Log.d("updating", city)
+        weatherClass(context, city, celsius) { weatherData -> updateUI(weatherData) }.execute()
     }
 
     LaunchedEffect(Unit) {
-
-
-
         val fetchedCoordinates = fetchCityCoordinates(api)
+
+        airQuality = fetchAirQuality(api, lat, lon)
+        if(airQuality == "1"){airQualityDesc = "Good"}
+        else if(airQuality == "2"){airQualityDesc = "Fair"}
+        else if(airQuality == "3"){airQualityDesc = "Moderate"}
+        else if(airQuality == "4"){airQualityDesc = "Poor"}
+        else {airQualityDesc = "Very Poor"}
+
         val givenCoordinates = Pair(lat, lon) // Provide your given coordinates here
         val closestCity = withContext(Dispatchers.Default) {
             findClosestCity(givenCoordinates, fetchedCoordinates)
@@ -96,7 +118,6 @@ fun ScreenB(navController: NavController, context: Context, newsContext: Context
 
         // Find the index of the closest city
         val index = cities.indexOf(closestCity)
-        mainCity = city
         if (index != -1) { // If closest city is found in the array
             // Create a new array to hold the rearranged elements
             val newArr = Array<String>(cities.size) { "" }
@@ -133,15 +154,16 @@ fun ScreenB(navController: NavController, context: Context, newsContext: Context
     LaunchedEffect(Unit) {
         while (true) {
             // Call the AsyncTask with the updateUI lambda function
-            weatherClass(context, city) { weatherData -> updateUI(weatherData) }.execute()
+            weatherClass(context, city, celsius) { weatherData -> updateUI(weatherData) }.execute()
 
             // Delay for a second
             delay(1000)
         }
-
-
-
     }
+
+
+
+
 
     // Page design
     Column(
@@ -151,25 +173,15 @@ fun ScreenB(navController: NavController, context: Context, newsContext: Context
             .swipeToChangeCity(
 
                 onSwipeLeft = {
-                    if (canSwipe) {
-                        selectedCityIndex++
-                        if (selectedCityIndex >= cities.count()) {
-                            selectedCityIndex = 0
-                        }
-                        city = cities[selectedCityIndex]
-                        canSwipe = false
+                    if (celsius) {
+                        celsius = false
                     }
                 },
 
 
                 onSwipeRight = {
-                    if (canSwipe) {
-                        selectedCityIndex--
-                        if (selectedCityIndex < 0) {
-                            selectedCityIndex = cities.count() - 1
-                        }
-                        city = cities[selectedCityIndex]
-                        canSwipe = false
+                    if (!celsius) {
+                        celsius = true
                     }
                 },
 
@@ -209,7 +221,7 @@ fun ScreenB(navController: NavController, context: Context, newsContext: Context
             // News button (right-aligned)
             Button(
                 onClick = {
-                    goToWeather(newsContext)
+                    goToWeather(newsContext, lat.toString(), lon.toString())
                 },
                 modifier = Modifier
                     .padding(start = 8.dp, top = 16.dp, end = 16.dp) // Adjust padding as needed
@@ -220,16 +232,91 @@ fun ScreenB(navController: NavController, context: Context, newsContext: Context
         }
 
 
-        if(city == mainCity && result){
-            Image(
-                modifier = Modifier
-                    .widthIn(min = 40.dp)
-                    .heightIn(min = 40.dp)
-                    .align(Alignment.CenterHorizontally),
-                painter = painterResource(id = R.drawable.home),
-                contentDescription = "sunrise"
-            )
+        val locations = remember { mutableStateListOf<String>() }
+        var searchText by remember { mutableStateOf("") }
+
+        TextField(
+            value = searchText,
+            onValueChange = { newText ->
+                searchText = newText
+                locations.clear()
+                // Call function to fetch data when the user types in the search bar
+                fetchLocations(searchText, locations)
+            },
+            modifier = Modifier
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp)
+                .fillMaxWidth()
+                .align(Alignment.CenterHorizontally),
+            textStyle = TextStyle(color = Color.White),
+            placeholder = { Text(text = "Search...") },
+            singleLine = true
+        )
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)// Adjust top padding to accommodate TextField
+                .heightIn(max = 200.dp) // Set a minimum height of 200.dp
+                .background(Color.Black) // Set background color
+        ) {
+            items(locations) { location ->
+                Box(
+                    modifier = Modifier
+                        .clickable {
+                            city = location.substring(4)
+                            Log.d("CityChanger", city)
+                            selectCity()
+                            locations.clear()
+                            searchText = ""
+
+                        }
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = location,
+                        color = Color.White
+                    )
+                }
+            }
         }
+
+        Row(
+            modifier = Modifier.fillMaxWidth()
+                .padding(end = 10.dp, start = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+
+        ) {
+            Box(
+                //modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "AQI $airQuality - $airQualityDesc",
+                    color = Color.White,
+                    fontSize = 16.sp
+                )
+            }
+            Box(
+                contentAlignment = Alignment.Center
+
+            ) {
+                Image(
+                    painter = if (celsius) painterResource(id = R.drawable.toggle_on) else painterResource(id = R.drawable.toggle_off),
+                    contentDescription = null,
+                    modifier = Modifier.size(50.dp)
+                )
+                Text(
+                    text = if (celsius) "C" else "F",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    modifier = if(celsius) Modifier.align(Alignment.Center).offset(-8.dp, -0.5.dp) else Modifier.align(Alignment.Center).offset(8.dp, -0.5.dp)
+                )
+            }
+        }
+
+
+
         // Location Text
         Text(
             text = weatherDataInfo.address,
@@ -340,8 +427,8 @@ fun ScreenB(navController: NavController, context: Context, newsContext: Context
                         ) // Padding outside the Box
                         .background(Color(0x5BFFFFFF)) // Translucent white color
                         .padding(10.dp)
-                        .widthIn(min = 80.dp) // Maximum width
-                        .heightIn(min = 80.dp) // Maximum height
+                        .widthIn(min = 80.dp)
+                        .heightIn(min = 80.dp)
                         .align(Alignment.CenterHorizontally),
                     contentAlignment = Alignment.Center
                 ) {
@@ -383,8 +470,8 @@ fun ScreenB(navController: NavController, context: Context, newsContext: Context
                         ) // Padding outside the Box
                         .background(Color(0x5BFFFFFF)) // Translucent white color
                         .padding(10.dp)
-                        .widthIn(min = 80.dp) // Maximum width
-                        .heightIn(min = 80.dp) // Maximum height
+                        .widthIn(min = 80.dp)
+                        .heightIn(min = 80.dp)
                         .align(Alignment.CenterHorizontally),
                     contentAlignment = Alignment.Center
                 ) {
@@ -436,8 +523,8 @@ fun ScreenB(navController: NavController, context: Context, newsContext: Context
                         ) // Padding outside the Box
                         .background(Color(0x5BFFFFFF)) // Translucent white color
                         .padding(10.dp)
-                        .widthIn(min = 80.dp) // Maximum width
-                        .heightIn(min = 80.dp) // Maximum height
+                        .widthIn(min = 80.dp)
+                        .heightIn(min = 80.dp)
                         .align(Alignment.CenterHorizontally),
                     contentAlignment = Alignment.Center
                 ) {
@@ -479,8 +566,8 @@ fun ScreenB(navController: NavController, context: Context, newsContext: Context
                         ) // Padding outside the Box
                         .background(Color(0x5BFFFFFF)) // Translucent white color
                         .padding(10.dp)
-                        .widthIn(min = 80.dp) // Maximum width
-                        .heightIn(min = 80.dp) // Maximum height
+                        .widthIn(min = 80.dp)
+                        .heightIn(min = 80.dp)
                         .align(Alignment.CenterHorizontally),
                     contentAlignment = Alignment.Center
                 ) {
@@ -522,8 +609,8 @@ fun ScreenB(navController: NavController, context: Context, newsContext: Context
                         ) // Padding outside the Box
                         .background(Color(0x5BFFFFFF)) // Translucent white color
                         .padding(10.dp)
-                        .widthIn(min = 80.dp) // Maximum width
-                        .heightIn(min = 80.dp) // Maximum height
+                        .widthIn(min = 80.dp)
+                        .heightIn(min = 80.dp)
                         .align(Alignment.CenterHorizontally),
                     contentAlignment = Alignment.Center
                 ) {
@@ -557,7 +644,13 @@ fun ScreenB(navController: NavController, context: Context, newsContext: Context
         }
     }
 
+
 }
+
+
+
+
+
 
 // Swipe gestures
 @SuppressLint("ModifierFactoryUnreferencedReceiver")
@@ -582,15 +675,31 @@ fun Modifier.swipeToChangeCity(
 }
 
 // Access the api and retrieve all data
-class weatherClass(private val context: Context, private val city: String, private val updateUI: (WeatherDataInfo) -> Unit) : AsyncTask<String, Void, String>() {
+class weatherClass(
+    private val context: Context,
+    private val city: String,
+    private val celsius: Boolean,
+    private val updateUI: (WeatherDataInfo) -> Unit
+) : AsyncTask<String, Void, String>() {
     override fun doInBackground(vararg params: String?): String? {
+        var loaded = false
         return try {
             if (isInternetAvailable(context)) {
                 // If internet is available, fetch data from the API
-                URL("https://api.openweathermap.org/data/2.5/weather?q=$city&units=metric&appid=$api").readText(Charsets.UTF_8)
+                URL("https://api.openweathermap.org/data/2.5/weather?q=$city&units=metric&appid=$api").readText(
+                    Charsets.UTF_8
+                )
             } else {
-                // If no internet, load data from the locally stored file
-                loadDataFromFile(context, "weather_data.json")
+                if (!loaded) {
+                    // If no internet, load data from the locally stored file
+                    val weatherDataList = loadDataFromContentProvider(context)
+                    // Convert the weather data list to JSON format
+                    updateUI(weatherDataList[0])
+                    loaded = true
+
+                }
+                // Optionally, handle other cases if needed
+                null
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -598,9 +707,15 @@ class weatherClass(private val context: Context, private val city: String, priva
         }
     }
 
+
     override fun onPostExecute(result: String?) {
         super.onPostExecute(result)
         try {
+            context?.contentResolver?.delete(
+                WeatherDataContract.CONTENT_URI,
+                null,
+                null
+            ) // Clear existing data
             result?.let { jsonResult ->
                 val jsonObj = JSONObject(result)
                 val main = jsonObj.getJSONObject("main")
@@ -608,28 +723,54 @@ class weatherClass(private val context: Context, private val city: String, priva
                 val wind = jsonObj.getJSONObject("wind")
                 val weather = jsonObj.getJSONArray("weather").getJSONObject(0)
 
-                val temp = round(main.getString("temp").toDouble()).toInt().toString() + "°C"
-                val tempMin =
-                    "Min Temp: " + round(main.getString("temp_min").toDouble()).toInt().toString() + "°C"
-                val tempMax =
-                    "Max Temp: " + round(main.getString("temp_max").toDouble()).toInt().toString() + "°C"
+                var temp = ""
+                var tempMin = ""
+                var tempMax = ""
+                var feelsLike = ""
+                if (celsius) {
+                    temp = round(main.getString("temp").toDouble()).toInt().toString() + "°C"
+                    tempMin =
+                        "Min Temp: " + round(main.getString("temp_min").toDouble()).toInt()
+                            .toString() + "°C"
+                    tempMax =
+                        "Max Temp: " + round(main.getString("temp_max").toDouble()).toInt()
+                            .toString() + "°C"
+                    feelsLike = round(main.getString("feels_like").toDouble()).toString() + "°C"
+                } else {
+                    temp = round((main.getString("temp").toDouble() * 2) + 30).toInt()
+                        .toString() + "°F"
+                    tempMin =
+                        "Min Temp: " + round(
+                            (main.getString("temp_min").toDouble() * 2) + 30
+                        ).toInt().toString() + "°F"
+                    tempMax =
+                        "Max Temp: " + round(
+                            (main.getString("temp_max").toDouble() * 2) + 30
+                        ).toInt().toString() + "°F"
+                    feelsLike =
+                        round((main.getString("feels_like").toDouble() * 2) + 30).toString() + "°F"
+                }
+
                 val pressure = main.getString("pressure")
                 val humidity = main.getString("humidity")
-                val feelsLike = round(main.getString("feels_like").toDouble()).toString() + "°C"
+
                 val windSpeed = (round(wind.getString("speed").toDouble() * 10) / 10).toString()
                 val weatherDescription = weather.getString("description")
                 val address = jsonObj.getString("name") + ", " + sys.getString("country")
 
                 val timezoneOffsetSeconds = jsonObj.getInt("timezone")
                 val timezone = TimeZone.getTimeZone("UTC")
-                val sdf = SimpleDateFormat("hh:mm a", Locale.ENGLISH)
+                val sdf = SimpleDateFormat("HH:mm", Locale.ENGLISH) // Use 24-hour format
 
                 val sunriseTimestamp = sys.getLong("sunrise") * 1000
                 val sunsetTimestamp = sys.getLong("sunset") * 1000
 
                 sdf.timeZone = timezone
-                val sunrise = sdf.format(Date(sunriseTimestamp + timezoneOffsetSeconds * 1000))
-                val sunset = sdf.format(Date(sunsetTimestamp + timezoneOffsetSeconds * 1000))
+                val sunrise =
+                    sdf.format(Date(sunriseTimestamp + timezoneOffsetSeconds * 1000)) + " AM"
+                val sunset =
+                    sdf.format(Date(sunsetTimestamp + timezoneOffsetSeconds * 1000)) + " PM"
+
 
                 val currentTimeMillis = System.currentTimeMillis()
                 val timeInTimeZoneMillis = currentTimeMillis + timezoneOffsetSeconds * 1000
@@ -639,7 +780,7 @@ class weatherClass(private val context: Context, private val city: String, priva
                 val year = calendar.get(Calendar.YEAR)
                 val month = calendar.get(Calendar.MONTH) + 1
                 val day = calendar.get(Calendar.DAY_OF_MONTH)
-                val hour = calendar.get(Calendar.HOUR_OF_DAY)-1
+                val hour = calendar.get(Calendar.HOUR_OF_DAY) - 1
                 val minute = calendar.get(Calendar.MINUTE)
                 val second = calendar.get(Calendar.SECOND)
 
@@ -668,18 +809,79 @@ class weatherClass(private val context: Context, private val city: String, priva
 
                 updateUI(weatherDataInfo)
 
-                val dataToSave = jsonObj.toString() // Convert JSON object to string
-                val filename = "weather_data.json"
-                saveDataToFile(context, dataToSave, filename)
+                // Insert data into content provider
+                val values = ContentValues().apply {
+                    put(WeatherDataContract.Columns.UPDATE_AT, updateAtText)
+                    put(WeatherDataContract.Columns.TEMP, temp)
+                    put(WeatherDataContract.Columns.TEMP_MIN, tempMin)
+                    put(WeatherDataContract.Columns.TEMP_MAX, tempMax)
+                    put(WeatherDataContract.Columns.PRESSURE, pressure)
+                    put(WeatherDataContract.Columns.HUMIDITY, humidity)
+                    put(WeatherDataContract.Columns.FEELS_LIKE, feelsLike)
+                    put(WeatherDataContract.Columns.SUNRISE, sunrise)
+                    put(WeatherDataContract.Columns.SUNSET, sunset)
+                    put(WeatherDataContract.Columns.WIND_SPEED, windSpeed)
+                    put(WeatherDataContract.Columns.WEATHER_DESCRIPTION, weatherDescription)
+                    put(WeatherDataContract.Columns.ADDRESS, address)
+                }
+                context?.contentResolver?.insert(WeatherDataContract.CONTENT_URI, values)
             }
         } catch (e: Exception) {
-            Log.d("datagotten", "data not retrieved")
-            return
+            e.printStackTrace()
         }
     }
-
-
 }
+
+    suspend fun fetchAirQuality(apiKey: String, lat: Double, lon: Double): String {
+    var airQuality = ""
+    withContext(Dispatchers.IO) {
+        try {
+            val apiUrl = "https://api.openweathermap.org/data/2.5/air_pollution?lat=$lat&lon=$lon&appid=$apiKey"
+            val response = URL(apiUrl).readText(Charsets.UTF_8)
+            val jsonObj = JSONObject(response)
+
+            // Get the first object in the "list" array
+            val list = jsonObj.getJSONArray("list")
+            if (list.length() > 0) {
+                val firstItem = list.getJSONObject(0)
+                val main = firstItem.getJSONObject("main")
+                // Get the AQI as a string
+                airQuality = main.getInt("aqi").toString()
+            }
+        } catch (e: Exception) {
+            Log.e("fetchAirQuality", "Error fetching air quality data: ${e.message}")
+            e.printStackTrace()
+        }
+    }
+    return airQuality
+}
+
+fun fetchLocations(query: String, locations: MutableList<String>) {
+    GlobalScope.launch(Dispatchers.IO) {
+        try {
+            val apiUrl = "https://api.openweathermap.org/geo/1.0/direct?q=$query&limit=5&appid=$api"
+            val response = URL(apiUrl).readText(Charsets.UTF_8)
+            Log.d("Locations", "Response: $response")
+            val jsonArray = JSONArray(response)
+            for (i in 0 until jsonArray.length()) {
+                val jsonObject = jsonArray.getJSONObject(i)
+                val name = jsonObject.getString("name")
+                val country = jsonObject.getString("country")
+                val state = jsonObject.optString("state", "")
+                println("Name: $name, Country: $country, State: $state")
+                val info = "$country, $name"
+                locations.add(info)
+            }
+            for(i in 0 until locations.count()){
+                Log.d("Locations1: ", locations[i])
+            }
+        } catch (e: Exception) {
+            Log.e("fetchLocations", "Error fetching locations data: ${e.message}")
+            e.printStackTrace()
+        }
+    }
+}
+
 
 // Get coordinates of cities to compare with the users
 suspend fun fetchCityCoordinates(apiKey: String): List<Pair<String, Pair<Double, Double>>> {
@@ -767,26 +969,98 @@ data class WeatherDataInfo(
     val address: String = ""
 )
 
+
+
+
 // Save data locally
-fun saveDataToFile(context: Context, data: String, filename: String) {
-    try {
-        val outputStream = context.openFileOutput(filename, Context.MODE_PRIVATE)
-        outputStream.write(data.toByteArray())
-        outputStream.close()
-    } catch (e: Exception) {
-        e.printStackTrace()
+fun saveDataToFile(context: Context, weatherData: WeatherDataInfo) {
+    val contentResolver = context.contentResolver
+
+    val values = ContentValues().apply {
+        put("updateAtText", weatherData.updateAtText)
+        put("temp", weatherData.temp)
+        put("tempMin", weatherData.tempMin)
+        put("tempMax", weatherData.tempMax)
+        put("pressure", weatherData.pressure)
+        put("humidity", weatherData.humidity)
+        put("feelsLike", weatherData.feelsLike)
+        put("sunrise", weatherData.sunrise)
+        put("sunset", weatherData.sunset)
+        put("windSpeed", weatherData.windSpeed)
+        put("weatherDescription", weatherData.weatherDescription)
+        put("address", weatherData.address)
     }
+
+    val uri = Uri.parse("content://com.example.weatherprovider/weather")
+    contentResolver.insert(uri, values)
 }
 
 // Load the data from the local storage
-fun loadDataFromFile(context: Context, filename: String): String? {
-    return try {
-        context.openFileInput(filename)?.bufferedReader()?.use { it.readText() }
-    } catch (e: Exception) {
-        e.printStackTrace()
+private fun loadDataFromContentProvider(context: Context): List<WeatherDataInfo> {
+    val contentResolver = context.contentResolver
+    val projection = arrayOf(
+        WeatherDataContract.Columns.UPDATE_AT,
+        WeatherDataContract.Columns.TEMP,
+        WeatherDataContract.Columns.TEMP_MIN,
+        WeatherDataContract.Columns.TEMP_MAX,
+        WeatherDataContract.Columns.PRESSURE,
+        WeatherDataContract.Columns.HUMIDITY,
+        WeatherDataContract.Columns.FEELS_LIKE,
+        WeatherDataContract.Columns.SUNRISE,
+        WeatherDataContract.Columns.SUNSET,
+        WeatherDataContract.Columns.WIND_SPEED,
+        WeatherDataContract.Columns.WEATHER_DESCRIPTION,
+        WeatherDataContract.Columns.ADDRESS
+    )
+    val cursor = contentResolver.query(
+        WeatherDataContract.CONTENT_URI,
+        projection,
+        null,
+        null,
         null
+    )
+
+    val weatherDataList = mutableListOf<WeatherDataInfo>()
+    cursor?.use {
+        while (it.moveToNext()) {
+            val updateAt = it.getString(it.getColumnIndexOrThrow(WeatherDataContract.Columns.UPDATE_AT))
+            val temp = it.getString(it.getColumnIndexOrThrow(WeatherDataContract.Columns.TEMP))
+            val tempMin = it.getString(it.getColumnIndexOrThrow(WeatherDataContract.Columns.TEMP_MIN))
+            val tempMax = it.getString(it.getColumnIndexOrThrow(WeatherDataContract.Columns.TEMP_MAX))
+            val pressure = it.getString(it.getColumnIndexOrThrow(WeatherDataContract.Columns.PRESSURE))
+            val humidity = it.getString(it.getColumnIndexOrThrow(WeatherDataContract.Columns.HUMIDITY))
+            val feelsLike = it.getString(it.getColumnIndexOrThrow(WeatherDataContract.Columns.FEELS_LIKE))
+            val sunrise = it.getString(it.getColumnIndexOrThrow(WeatherDataContract.Columns.SUNRISE))
+            val sunset = it.getString(it.getColumnIndexOrThrow(WeatherDataContract.Columns.SUNSET))
+            val windSpeed = it.getString(it.getColumnIndexOrThrow(WeatherDataContract.Columns.WIND_SPEED))
+            val weatherDescription = it.getString(it.getColumnIndexOrThrow(WeatherDataContract.Columns.WEATHER_DESCRIPTION))
+            val address = it.getString(it.getColumnIndexOrThrow(WeatherDataContract.Columns.ADDRESS))
+
+            val weatherData = WeatherDataInfo(
+                updateAtText = updateAt,
+                temp = temp,
+                tempMin = tempMin,
+                tempMax = tempMax,
+                pressure = pressure,
+                humidity = humidity,
+                feelsLike = feelsLike,
+                sunrise = sunrise,
+                sunset = sunset,
+                windSpeed = windSpeed,
+                weatherDescription = weatherDescription,
+                address = address
+            )
+            weatherDataList.add(weatherData)
+
+            // Add a log statement to output each row of data
+            Log.d("WeatherData", "Loaded data from content provider: $weatherData")
+        }
     }
+
+    return weatherDataList
 }
+
+
 
 // Check if theres access to the internet
 fun isInternetAvailable(context: Context): Boolean {
@@ -817,8 +1091,8 @@ fun isInternetAvailable(context: Context): Boolean {
 }
 
 // Access to an outside app
-fun goToWeather(context: Context?) {
-    val url = "https://www.google.com/search?q=weather"
+fun goToWeather(context: Context?, lat:String, lon:String) {
+    val url = "https://www.ventusky.com/?p=$lat;$lon;5&l=temperature-2m&w=off"
     goToUrl(context, url)
 }
 
@@ -826,4 +1100,26 @@ private fun goToUrl(context: Context?, url: String) {
     val uriUrl = Uri.parse(url)
     val launchBrowser = Intent(Intent.ACTION_VIEW, uriUrl)
     context?.startActivity(launchBrowser)
+}
+
+object WeatherDataContract {
+    const val AUTHORITY = "com.example.weather.provider"
+    const val PATH_WEATHER = "weather"
+    val CONTENT_URI: Uri = Uri.parse("content://$AUTHORITY/$PATH_WEATHER")
+
+    object Columns {
+        const val ID = "_id"
+        const val UPDATE_AT = "update_at"
+        const val TEMP = "temp"
+        const val TEMP_MIN = "temp_min"
+        const val TEMP_MAX = "temp_max"
+        const val PRESSURE = "pressure"
+        const val HUMIDITY = "humidity"
+        const val FEELS_LIKE = "feels_like"
+        const val SUNRISE = "sunrise"
+        const val SUNSET = "sunset"
+        const val WIND_SPEED = "wind_speed"
+        const val WEATHER_DESCRIPTION = "weather_description"
+        const val ADDRESS = "address"
+    }
 }
